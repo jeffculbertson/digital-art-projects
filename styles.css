@@ -145,8 +145,7 @@ input[type="range"]:disabled {
   flex: 1 1 0;
 }
 
-button,
-.button-row button {
+button {
   padding: 0.8rem;
   border: none;
   border-radius: 0.85rem;

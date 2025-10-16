@@ -10,14 +10,18 @@ const controls = {
   uploadInput: document.getElementById("uploadInput"),
   baseSize: document.getElementById("baseSize"),
   shapeDistribution: document.getElementById("shapeDistribution"),
+  outlineProbability: document.getElementById("outlineProbability"),
   sizeDistribution: document.getElementById("sizeDistribution"),
+  maxSize: document.getElementById("maxSize"),
   layerCount: document.getElementById("layerCount"),
   randomizeButton: document.getElementById("randomizeButton"),
   saveButton: document.getElementById("saveButton"),
   display: {
     baseSize: document.getElementById("baseSizeValue"),
     shapeDistribution: document.getElementById("shapeDistributionValue"),
+    outlineProbability: document.getElementById("outlineProbabilityValue"),
     sizeDistribution: document.getElementById("sizeDistributionValue"),
+    maxSize: document.getElementById("maxSizeValue"),
     layerCount: document.getElementById("layerCountValue"),
   },
 };
@@ -27,7 +31,9 @@ const placeholder = document.getElementById("placeholder");
 const dependentControls = [
   controls.baseSize,
   controls.shapeDistribution,
+  controls.outlineProbability,
   controls.sizeDistribution,
+  controls.maxSize,
   controls.layerCount,
   controls.randomizeButton,
   controls.saveButton,
@@ -36,7 +42,9 @@ const dependentControls = [
 const sliderFormatters = {
   baseSize: (value) => `${value}px`,
   shapeDistribution: (value) => `${value}%`,
+  outlineProbability: (value) => `${value}%`,
   sizeDistribution: (value) => `${value}%`,
+  maxSize: (value) => `${value}x`,
   layerCount: (value) => value,
 };
 
@@ -63,7 +71,7 @@ controls.randomizeButton.addEventListener("click", () => {
 });
 controls.saveButton.addEventListener("click", saveAsPng);
 
-["baseSize", "shapeDistribution", "sizeDistribution", "layerCount"].forEach((key) => {
+["baseSize", "shapeDistribution", "outlineProbability", "sizeDistribution", "maxSize", "layerCount"].forEach((key) => {
   const control = controls[key];
   control.addEventListener("input", () => {
     updateSliderDisplay(key, control.value);
@@ -90,7 +98,7 @@ function handleFileSelection(event) {
       renderArtwork();
     };
     image.onerror = () => {
-      showTemporaryMessage("Unable to load that file. Try a different PNG.");
+      showTemporaryMessage("Unable to load that file. Try a different image.");
     };
     image.src = reader.result;
   };
@@ -132,11 +140,11 @@ function updateSliderDisplay(key, value) {
 function renderArtwork() {
   if (!state.sourceImage || !state.sourceData) return;
 
-  const random = seededRandom(state.randomSeed);
-
   const baseSize = parseInt(controls.baseSize.value, 10);
-  const shapeDistribution = parseInt(controls.shapeDistribution.value, 10) / 100;
-  const sizeDistribution = parseInt(controls.sizeDistribution.value, 10) / 100;
+  const shapeDistribution = clamp01(parseInt(controls.shapeDistribution.value, 10) / 100);
+  const outlineProbability = clamp01(parseInt(controls.outlineProbability.value, 10) / 100);
+  const sizeDistribution = clamp01(parseInt(controls.sizeDistribution.value, 10) / 100);
+  const maxSize = Math.min(12, Math.max(2, parseInt(controls.maxSize.value, 10) || 2));
   const layers = parseInt(controls.layerCount.value, 10);
 
   const { width, height } = canvas;
@@ -144,15 +152,20 @@ function renderArtwork() {
   drawCornerGradient(width, height, state.cornerColors);
 
   const layerOpacity = (index) => (index === 0 ? 1 : 0.5);
+  const masterRandom = seededRandom(state.randomSeed);
 
   for (let layerIndex = 0; layerIndex < layers; layerIndex += 1) {
+    const layerSeed = masterRandom();
+    const layerRandom = seededRandom(layerSeed);
     const cells = generateMasonryLayer({
       width,
       height,
       baseSize,
       shapeDistribution,
+      outlineProbability,
       sizeDistribution,
-      random,
+      maxSize,
+      random: layerRandom,
     });
     drawMasonryLayer(cells, layerOpacity(layerIndex));
   }
@@ -165,20 +178,30 @@ function drawCornerGradient(width, height, colors) {
   ctx.drawImage(gradientCanvas, 0, 0, gradientCanvas.width, gradientCanvas.height, 0, 0, width, height);
 }
 
-function generateMasonryLayer({ width, height, baseSize, shapeDistribution, sizeDistribution, random }) {
+function generateMasonryLayer({
+  width,
+  height,
+  baseSize,
+  shapeDistribution,
+  outlineProbability,
+  sizeDistribution,
+  maxSize,
+  random,
+}) {
   const cols = Math.max(1, Math.floor(width / baseSize));
   const rows = Math.max(1, Math.floor(height / baseSize));
   const occupied = Array.from({ length: rows }, () => Array(cols).fill(false));
   const cells = [];
 
-  const probabilities = getSizeProbabilities(sizeDistribution);
+  const maxMultiplier = Math.max(2, Math.min(12, Math.floor(maxSize)));
+  const probabilities = getSizeProbabilities(sizeDistribution, maxMultiplier);
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
       if (occupied[row][col]) continue;
 
       let size = chooseSize(probabilities, random);
-      size = adjustSizeForBounds(size, row, col, rows, cols, occupied);
+      size = adjustSizeForBounds(size, row, col, rows, cols, occupied, maxMultiplier);
       markOccupied(occupied, row, col, size);
 
       const px = col * baseSize;
@@ -187,24 +210,26 @@ function generateMasonryLayer({ width, height, baseSize, shapeDistribution, size
       const cellHeight = baseSize * size;
       const shape = random() < shapeDistribution ? "circle" : "square";
       const color = sampleRandomColor(px, py, cellWidth, cellHeight, width, height, random);
+      const outline = random() < outlineProbability;
 
-      cells.push({ x: px, y: py, width: cellWidth, height: cellHeight, shape, color });
+      cells.push({ x: px, y: py, width: cellWidth, height: cellHeight, shape, color, outline });
     }
   }
 
   return cells;
 }
 
-function getSizeProbabilities(t) {
+function getSizeProbabilities(t, maxSize) {
   const clamped = Math.max(0, Math.min(1, t));
-  const p1 = 1 - 0.75 * clamped;
-  const pRest = 0.25 * clamped;
-  return [
-    { size: 1, weight: p1 },
-    { size: 2, weight: pRest },
-    { size: 3, weight: pRest },
-    { size: 4, weight: pRest },
-  ];
+  const maxMultiplier = Math.max(2, maxSize);
+  const probabilities = [{ size: 1, weight: 1 - 0.75 * clamped }];
+  const extraCount = maxMultiplier - 1;
+  const extraWeightTotal = 0.75 * clamped;
+  const perExtraWeight = extraCount > 0 ? extraWeightTotal / extraCount : 0;
+  for (let size = 2; size <= maxMultiplier; size += 1) {
+    probabilities.push({ size, weight: perExtraWeight });
+  }
+  return probabilities;
 }
 
 function chooseSize(probabilities, random) {
@@ -220,9 +245,9 @@ function chooseSize(probabilities, random) {
   return probabilities[probabilities.length - 1].size;
 }
 
-function adjustSizeForBounds(size, startRow, startCol, rows, cols, occupied) {
-  const maxSize = Math.min(4, rows - startRow, cols - startCol);
-  const bounded = Math.min(size, maxSize);
+function adjustSizeForBounds(size, startRow, startCol, rows, cols, occupied, maxSize) {
+  const maxCandidate = Math.min(maxSize, rows - startRow, cols - startCol);
+  const bounded = Math.min(size, maxCandidate);
   for (let candidate = bounded; candidate >= 1; candidate -= 1) {
     if (canPlace(candidate, startRow, startCol, occupied)) {
       return candidate;
@@ -271,14 +296,30 @@ function drawMasonryLayer(cells, opacity) {
   ctx.save();
   ctx.globalAlpha = opacity;
   cells.forEach((cell) => {
-    ctx.fillStyle = cell.color;
     if (cell.shape === "circle") {
-      const radiusX = cell.width / 2;
-      const radiusY = cell.height / 2;
+      const centerX = cell.x + cell.width / 2;
+      const centerY = cell.y + cell.height / 2;
+      const baseRadiusX = cell.width / 2;
+      const baseRadiusY = cell.height / 2;
+      const offset = cell.outline ? 1 : 0;
+      const radiusX = Math.max(0, baseRadiusX - offset);
+      const radiusY = Math.max(0, baseRadiusY - offset);
       ctx.beginPath();
-      ctx.ellipse(cell.x + radiusX, cell.y + radiusY, radiusX, radiusY, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+      if (cell.outline) {
+        ctx.strokeStyle = cell.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = cell.color;
+        ctx.fill();
+      }
+    } else if (cell.outline) {
+      ctx.strokeStyle = cell.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cell.x + 1, cell.y + 1, Math.max(0, cell.width - 2), Math.max(0, cell.height - 2));
     } else {
+      ctx.fillStyle = cell.color;
       ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
     }
   });
@@ -376,10 +417,16 @@ function saveAsPng() {
   link.click();
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
 // Initialize slider labels.
 updateSliderDisplay("baseSize", controls.baseSize.value);
 updateSliderDisplay("shapeDistribution", controls.shapeDistribution.value);
+updateSliderDisplay("outlineProbability", controls.outlineProbability.value);
 updateSliderDisplay("sizeDistribution", controls.sizeDistribution.value);
+updateSliderDisplay("maxSize", controls.maxSize.value);
 updateSliderDisplay("layerCount", controls.layerCount.value);
 
 function seededRandom(seed) {
