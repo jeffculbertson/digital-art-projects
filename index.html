@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Art Playground</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Digital Art Playground</h1>
+    <p class="tagline">Transform any image into layered geometric mosaics.</p>
+  </header>
+
+  <main class="app-main">
+    <section class="controls">
+      <div class="control-group">
+        <label for="uploadInput">Source Image</label>
+        <label class="file-upload">
+          <input
+            id="uploadInput"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            aria-label="Upload image (PNG, JPG, or WebP)"
+          >
+          <span class="file-upload__text">Upload Image</span>
+        </label>
+        <p class="control-help">PNG, JPG, and WebP supported.</p>
+      </div>
+
+      <div class="control-group">
+        <label for="baseSize">Base Size <span id="baseSizeValue">50px</span></label>
+        <input id="baseSize" type="range" min="10" max="100" value="50" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="shapeDistribution">Shape Distribution <span id="shapeDistributionValue">50%</span></label>
+        <input id="shapeDistribution" type="range" min="0" max="100" value="50" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="sizeDistribution">Size Distribution <span id="sizeDistributionValue">50%</span></label>
+        <input id="sizeDistribution" type="range" min="0" max="100" value="50" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="layerCount">Layers <span id="layerCountValue">3</span></label>
+        <input id="layerCount" type="range" min="1" max="5" value="3" step="1" disabled>
+      </div>
+
+      <div class="button-row">
+        <button id="randomizeButton" type="button" disabled>Randomize Layout</button>
+        <button id="saveButton" type="button" disabled>Save as PNG</button>
+      </div>
+    </section>
+
+    <section class="canvas-wrapper">
+      <canvas id="artCanvas"></canvas>
+      <div id="placeholder" class="canvas-placeholder">
+        <p>Upload an image (PNG, JPG, or WebP) to generate art.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Tip: Larger base sizes emphasize structure; more layers add depth.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
