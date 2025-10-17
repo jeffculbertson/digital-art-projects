@@ -6,6 +6,18 @@ if (!ctx) {
   throw new Error("Canvas 2D context not available.");
 }
 
+const imagePreview = {
+  group: document.getElementById("imagePreviewGroup"),
+  frame: document.querySelector(".image-preview__frame"),
+  image: document.getElementById("imageThumbnail"),
+};
+
+if (!imagePreview.group || !imagePreview.frame || !imagePreview.image) {
+  throw new Error("Image preview elements missing.");
+}
+
+hideImagePreview();
+
 const controls = {
   uploadInput: document.getElementById("uploadInput"),
   baseSize: document.getElementById("baseSize"),
@@ -91,8 +103,9 @@ function handleFileSelection(event) {
   reader.onload = () => {
     const image = new Image();
     image.crossOrigin = "anonymous";
+    const dataURL = typeof reader.result === "string" ? reader.result : "";
     image.onload = () => {
-      prepareSourceImage(image);
+      prepareSourceImage(image, dataURL);
       enableControls();
       state.randomSeed = Math.random();
       renderArtwork();
@@ -100,12 +113,12 @@ function handleFileSelection(event) {
     image.onerror = () => {
       showTemporaryMessage("Unable to load that file. Try a different image.");
     };
-    image.src = reader.result;
+    image.src = dataURL;
   };
   reader.readAsDataURL(file);
 }
 
-function prepareSourceImage(image) {
+function prepareSourceImage(image, dataURL) {
   const { width, height } = image;
   if (!width || !height) {
     throw new Error("Image dimensions unavailable.");
@@ -117,6 +130,7 @@ function prepareSourceImage(image) {
   state.sourceData = state.sourceCtx.getImageData(0, 0, width, height);
   state.cornerColors = getCornerColors(state.sourceData, width, height);
   state.sourceImage = image;
+  showImagePreview(dataURL || state.sourceCanvas.toDataURL("image/png"), width, height);
   setCanvasSize(width, height);
   hidePlaceholder();
 }
@@ -153,6 +167,14 @@ function renderArtwork() {
 
   const layerOpacity = (index) => (index === 0 ? 1 : 0.5);
   const masterRandom = seededRandom(state.randomSeed);
+  const offsetSeed = masterRandom();
+  const offsetRandom = seededRandom(offsetSeed);
+  const offsets = getGridOffsets({
+    baseSize,
+    width,
+    height,
+    random: offsetRandom,
+  });
 
   for (let layerIndex = 0; layerIndex < layers; layerIndex += 1) {
     const layerSeed = masterRandom();
@@ -165,6 +187,7 @@ function renderArtwork() {
       outlineProbability,
       sizeDistribution,
       maxSize,
+      offsets,
       random: layerRandom,
     });
     drawMasonryLayer(cells, layerOpacity(layerIndex));
@@ -186,33 +209,48 @@ function generateMasonryLayer({
   outlineProbability,
   sizeDistribution,
   maxSize,
+  offsets,
   random,
 }) {
-  const cols = Math.max(1, Math.floor(width / baseSize));
-  const rows = Math.max(1, Math.floor(height / baseSize));
-  const occupied = Array.from({ length: rows }, () => Array(cols).fill(false));
-  const cells = [];
-
   const maxMultiplier = Math.max(2, Math.min(12, Math.floor(maxSize)));
   const probabilities = getSizeProbabilities(sizeDistribution, maxMultiplier);
+  const offsetX = offsets?.x ?? 0;
+  const offsetY = offsets?.y ?? 0;
+  const paddingCols = Math.max(2, maxMultiplier);
+  const paddingRows = Math.max(2, maxMultiplier);
+  const cols = Math.max(1, Math.ceil((width + offsetX) / baseSize) + paddingCols);
+  const rows = Math.max(1, Math.ceil((height + offsetY) / baseSize) + paddingRows);
+  const occupied = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const cells = [];
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
       if (occupied[row][col]) continue;
 
-      let size = chooseSize(probabilities, random);
-      size = adjustSizeForBounds(size, row, col, rows, cols, occupied, maxMultiplier);
-      markOccupied(occupied, row, col, size);
+      const desiredSize = chooseSize(probabilities, random);
+      const boundedSize = adjustSizeForBounds(desiredSize, row, col, rows, cols, occupied, maxMultiplier);
+      markOccupied(occupied, row, col, boundedSize);
 
-      const px = col * baseSize;
-      const py = row * baseSize;
-      const cellWidth = baseSize * size;
-      const cellHeight = baseSize * size;
+      const px = col * baseSize - offsetX;
+      const py = row * baseSize - offsetY;
+      const cellSize = baseSize * boundedSize;
+      if (px >= width || py >= height || px + cellSize <= 0 || py + cellSize <= 0) {
+        continue;
+      }
+
       const shape = random() < shapeDistribution ? "circle" : "square";
-      const color = sampleRandomColor(px, py, cellWidth, cellHeight, width, height, random);
+      const color = sampleRandomColor(px, py, cellSize, cellSize, width, height, random);
       const outline = random() < outlineProbability;
 
-      cells.push({ x: px, y: py, width: cellWidth, height: cellHeight, shape, color, outline });
+      cells.push({
+        x: px,
+        y: py,
+        width: cellSize,
+        height: cellSize,
+        shape,
+        color,
+        outline,
+      });
     }
   }
 
@@ -255,7 +293,6 @@ function adjustSizeForBounds(size, startRow, startCol, rows, cols, occupied, max
   }
   return 1;
 }
-
 function canPlace(size, startRow, startCol, occupied) {
   for (let row = startRow; row < startRow + size; row += 1) {
     for (let col = startCol; col < startCol + size; col += 1) {
@@ -273,6 +310,16 @@ function markOccupied(occupied, startRow, startCol, size) {
       occupied[row][col] = true;
     }
   }
+}
+
+function getGridOffsets({ baseSize, width, height, random }) {
+  const safeBase = Math.max(1, baseSize);
+  const horizontalLimit = Math.min(safeBase, Math.max(0, width - safeBase)) || safeBase;
+  const verticalLimit = Math.min(safeBase, Math.max(0, height - safeBase)) || safeBase;
+  return {
+    x: random() * horizontalLimit,
+    y: random() * verticalLimit,
+  };
 }
 
 function sampleRandomColor(px, py, cellWidth, cellHeight, width, height, random) {
@@ -299,13 +346,11 @@ function drawMasonryLayer(cells, opacity) {
     if (cell.shape === "circle") {
       const centerX = cell.x + cell.width / 2;
       const centerY = cell.y + cell.height / 2;
-      const baseRadiusX = cell.width / 2;
-      const baseRadiusY = cell.height / 2;
+      const diameter = Math.min(cell.width, cell.height);
       const offset = cell.outline ? 1 : 0;
-      const radiusX = Math.max(0, baseRadiusX - offset);
-      const radiusY = Math.max(0, baseRadiusY - offset);
+      const radius = Math.max(0, diameter / 2 - offset);
       ctx.beginPath();
-      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       if (cell.outline) {
         ctx.strokeStyle = cell.color;
         ctx.lineWidth = 2;
@@ -315,12 +360,18 @@ function drawMasonryLayer(cells, opacity) {
         ctx.fill();
       }
     } else if (cell.outline) {
+      const side = Math.min(cell.width, cell.height);
+      const offsetX = (cell.width - side) / 2;
+      const offsetY = (cell.height - side) / 2;
       ctx.strokeStyle = cell.color;
       ctx.lineWidth = 2;
-      ctx.strokeRect(cell.x + 1, cell.y + 1, Math.max(0, cell.width - 2), Math.max(0, cell.height - 2));
+      ctx.strokeRect(cell.x + offsetX + 1, cell.y + offsetY + 1, Math.max(0, side - 2), Math.max(0, side - 2));
     } else {
+      const side = Math.min(cell.width, cell.height);
+      const offsetX = (cell.width - side) / 2;
+      const offsetY = (cell.height - side) / 2;
       ctx.fillStyle = cell.color;
-      ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+      ctx.fillRect(cell.x + offsetX, cell.y + offsetY, side, side);
     }
   });
   ctx.restore();
@@ -405,6 +456,26 @@ function showTemporaryMessage(message) {
       placeholder.textContent = "Upload an image (PNG, JPG, or WebP) to generate art.";
     }
   }, 2400);
+}
+
+function showImagePreview(dataURL, width, height) {
+  if (!dataURL) return;
+  imagePreview.image.src = dataURL;
+  if (width && height) {
+    imagePreview.image.alt = `Original upload thumbnail (${width}x${height})`;
+    imagePreview.frame.style.aspectRatio = `${width} / ${height}`;
+  } else {
+    imagePreview.image.alt = "Original upload thumbnail";
+    imagePreview.frame.style.removeProperty("aspect-ratio");
+  }
+  imagePreview.group.classList.remove("hidden");
+}
+
+function hideImagePreview() {
+  imagePreview.group.classList.add("hidden");
+  imagePreview.image.removeAttribute("src");
+  imagePreview.image.alt = "Original upload thumbnail";
+  imagePreview.frame.style.removeProperty("aspect-ratio");
 }
 
 function saveAsPng() {
