@@ -23,6 +23,7 @@ const controls = {
   baseSize: document.getElementById("baseSize"),
   shapeDistribution: document.getElementById("shapeDistribution"),
   outlineProbability: document.getElementById("outlineProbability"),
+  strokeSize: document.getElementById("strokeSize"),
   sizeDistribution: document.getElementById("sizeDistribution"),
   maxSize: document.getElementById("maxSize"),
   layerCount: document.getElementById("layerCount"),
@@ -32,6 +33,7 @@ const controls = {
     baseSize: document.getElementById("baseSizeValue"),
     shapeDistribution: document.getElementById("shapeDistributionValue"),
     outlineProbability: document.getElementById("outlineProbabilityValue"),
+    strokeSize: document.getElementById("strokeSizeValue"),
     sizeDistribution: document.getElementById("sizeDistributionValue"),
     maxSize: document.getElementById("maxSizeValue"),
     layerCount: document.getElementById("layerCountValue"),
@@ -44,6 +46,7 @@ const dependentControls = [
   controls.baseSize,
   controls.shapeDistribution,
   controls.outlineProbability,
+  controls.strokeSize,
   controls.sizeDistribution,
   controls.maxSize,
   controls.layerCount,
@@ -55,6 +58,7 @@ const sliderFormatters = {
   baseSize: (value) => `${value}px`,
   shapeDistribution: (value) => `${value}%`,
   outlineProbability: (value) => `${value}%`,
+  strokeSize: (value) => `${value}px`,
   sizeDistribution: (value) => `${value}%`,
   maxSize: (value) => `${value}x`,
   layerCount: (value) => value,
@@ -83,7 +87,7 @@ controls.randomizeButton.addEventListener("click", () => {
 });
 controls.saveButton.addEventListener("click", saveAsPng);
 
-["baseSize", "shapeDistribution", "outlineProbability", "sizeDistribution", "maxSize", "layerCount"].forEach((key) => {
+["baseSize", "shapeDistribution", "outlineProbability", "strokeSize", "sizeDistribution", "maxSize", "layerCount"].forEach((key) => {
   const control = controls[key];
   control.addEventListener("input", () => {
     updateSliderDisplay(key, control.value);
@@ -157,6 +161,7 @@ function renderArtwork() {
   const baseSize = parseInt(controls.baseSize.value, 10);
   const shapeDistribution = clamp01(parseInt(controls.shapeDistribution.value, 10) / 100);
   const outlineProbability = clamp01(parseInt(controls.outlineProbability.value, 10) / 100);
+  const strokeSize = Math.max(1, parseInt(controls.strokeSize.value, 10) || 1);
   const sizeDistribution = clamp01(parseInt(controls.sizeDistribution.value, 10) / 100);
   const maxSize = Math.min(12, Math.max(2, parseInt(controls.maxSize.value, 10) || 2));
   const layers = parseInt(controls.layerCount.value, 10);
@@ -190,7 +195,7 @@ function renderArtwork() {
       offsets,
       random: layerRandom,
     });
-    drawMasonryLayer(cells, layerOpacity(layerIndex));
+    drawMasonryLayer(cells, layerOpacity(layerIndex), strokeSize);
   }
 }
 
@@ -339,35 +344,41 @@ function getPixelColor(x, y) {
   };
 }
 
-function drawMasonryLayer(cells, opacity) {
+function drawMasonryLayer(cells, opacity, strokeSize) {
   ctx.save();
   ctx.globalAlpha = opacity;
   cells.forEach((cell) => {
+    const minDimension = Math.min(cell.width, cell.height);
+    const maxStroke = minDimension / 2;
+    const lineWidth = cell.outline && maxStroke > 0 ? Math.min(strokeSize, maxStroke) : 0;
+    const shouldStroke = cell.outline && lineWidth > 0;
+
     if (cell.shape === "circle") {
       const centerX = cell.x + cell.width / 2;
       const centerY = cell.y + cell.height / 2;
-      const diameter = Math.min(cell.width, cell.height);
-      const offset = cell.outline ? 1 : 0;
-      const radius = Math.max(0, diameter / 2 - offset);
+      const diameter = minDimension;
+      const radius = shouldStroke ? Math.max(0, diameter / 2 - lineWidth / 2) : diameter / 2;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      if (cell.outline) {
+      if (shouldStroke) {
         ctx.strokeStyle = cell.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = lineWidth;
         ctx.stroke();
       } else {
         ctx.fillStyle = cell.color;
         ctx.fill();
       }
-    } else if (cell.outline) {
-      const side = Math.min(cell.width, cell.height);
+    } else if (shouldStroke) {
+      const side = minDimension;
       const offsetX = (cell.width - side) / 2;
       const offsetY = (cell.height - side) / 2;
       ctx.strokeStyle = cell.color;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(cell.x + offsetX + 1, cell.y + offsetY + 1, Math.max(0, side - 2), Math.max(0, side - 2));
+      ctx.lineWidth = lineWidth;
+      const inset = lineWidth / 2;
+      const size = Math.max(0, side - lineWidth);
+      ctx.strokeRect(cell.x + offsetX + inset, cell.y + offsetY + inset, size, size);
     } else {
-      const side = Math.min(cell.width, cell.height);
+      const side = minDimension;
       const offsetX = (cell.width - side) / 2;
       const offsetY = (cell.height - side) / 2;
       ctx.fillStyle = cell.color;
@@ -496,6 +507,7 @@ function clamp01(value) {
 updateSliderDisplay("baseSize", controls.baseSize.value);
 updateSliderDisplay("shapeDistribution", controls.shapeDistribution.value);
 updateSliderDisplay("outlineProbability", controls.outlineProbability.value);
+updateSliderDisplay("strokeSize", controls.strokeSize.value);
 updateSliderDisplay("sizeDistribution", controls.sizeDistribution.value);
 updateSliderDisplay("maxSize", controls.maxSize.value);
 updateSliderDisplay("layerCount", controls.layerCount.value);
