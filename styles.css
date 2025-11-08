@@ -70,6 +70,13 @@ body {
   gap: 0.75rem;
 }
 
+.image-preview__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .image-preview__label {
   margin: 0;
   font-weight: 600;
@@ -77,6 +84,28 @@ body {
   text-transform: uppercase;
   font-size: 0.85rem;
   color: rgba(247, 247, 255, 0.7);
+}
+
+.image-preview__toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(247, 247, 255, 0.7);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.image-preview__toggle:hover {
+  color: #fdf2ff;
+}
+
+.image-preview__toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .image-preview__frame {
@@ -135,10 +164,26 @@ input[type="range"]:disabled {
   cursor: not-allowed;
 }
 
-.control-help {
-  font-size: 0.8rem;
-  margin: 0;
-  color: rgba(247, 247, 255, 0.55);
+.seed-input {
+  background: rgba(19, 14, 31, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  font-size: 1rem;
+  color: inherit;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.seed-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 3px rgba(160, 32, 240, 0.3);
+}
+
+.seed-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .file-upload {

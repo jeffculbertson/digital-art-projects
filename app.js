@@ -7,16 +7,22 @@ if (!ctx) {
 }
 
 const imagePreview = {
-  group: document.getElementById("imagePreviewGroup"),
+  container: document.getElementById("imagePreviewContainer"),
+  body: document.getElementById("imagePreviewBody"),
   frame: document.querySelector(".image-preview__frame"),
   image: document.getElementById("imageThumbnail"),
+  toggle: document.getElementById("imagePreviewToggle"),
 };
 
-if (!imagePreview.group || !imagePreview.frame || !imagePreview.image) {
+if (
+  !imagePreview.container ||
+  !imagePreview.body ||
+  !imagePreview.frame ||
+  !imagePreview.image ||
+  !imagePreview.toggle
+) {
   throw new Error("Image preview elements missing.");
 }
-
-hideImagePreview();
 
 const controls = {
   uploadInput: document.getElementById("uploadInput"),
@@ -26,6 +32,7 @@ const controls = {
   strokeSize: document.getElementById("strokeSize"),
   sizeDistribution: document.getElementById("sizeDistribution"),
   maxSize: document.getElementById("maxSize"),
+  seedInput: document.getElementById("seedInput"),
   layerCount: document.getElementById("layerCount"),
   randomizeButton: document.getElementById("randomizeButton"),
   saveButton: document.getElementById("saveButton"),
@@ -49,6 +56,7 @@ const dependentControls = [
   controls.strokeSize,
   controls.sizeDistribution,
   controls.maxSize,
+  controls.seedInput,
   controls.layerCount,
   controls.randomizeButton,
   controls.saveButton,
@@ -72,20 +80,32 @@ const state = {
   sourceCtx: null,
   sourceData: null,
   cornerColors: null,
-  randomSeed: Math.random(),
+  seedString: generateSeedString(),
+  randomSeed: 0,
+  previewVisible: true,
 };
+state.randomSeed = hashSeed(state.seedString);
+controls.seedInput.value = state.seedString;
 
 state.sourceCtx = state.sourceCanvas.getContext("2d");
 if (!state.sourceCtx) {
   throw new Error("Offscreen 2D context not available.");
 }
 
+hideImagePreview();
+
 controls.uploadInput.addEventListener("change", handleFileSelection);
 controls.randomizeButton.addEventListener("click", () => {
-  state.randomSeed = Math.random();
-  renderArtwork();
+  applyRandomSeed({ rerender: true });
 });
 controls.saveButton.addEventListener("click", saveAsPng);
+imagePreview.toggle.addEventListener("click", togglePreviewVisibility);
+controls.seedInput.addEventListener("input", handleSeedInput);
+controls.seedInput.addEventListener("blur", () => {
+  if (!controls.seedInput.value.trim()) {
+    applyRandomSeed({ rerender: true });
+  }
+});
 
 ["baseSize", "shapeDistribution", "outlineProbability", "strokeSize", "sizeDistribution", "maxSize", "layerCount"].forEach((key) => {
   const control = controls[key];
@@ -111,7 +131,6 @@ function handleFileSelection(event) {
     image.onload = () => {
       prepareSourceImage(image, dataURL);
       enableControls();
-      state.randomSeed = Math.random();
       renderArtwork();
     };
     image.onerror = () => {
@@ -148,6 +167,7 @@ function enableControls() {
   dependentControls.forEach((control) => {
     control.disabled = false;
   });
+  controls.seedInput.value = state.seedString;
 }
 
 function updateSliderDisplay(key, value) {
@@ -479,24 +499,85 @@ function showImagePreview(dataURL, width, height) {
     imagePreview.image.alt = "Original upload thumbnail";
     imagePreview.frame.style.removeProperty("aspect-ratio");
   }
-  imagePreview.group.classList.remove("hidden");
+  imagePreview.container.classList.remove("hidden");
+  state.previewVisible = true;
+  updatePreviewVisibility();
 }
 
 function hideImagePreview() {
-  imagePreview.group.classList.add("hidden");
+  imagePreview.container.classList.add("hidden");
+  imagePreview.body.classList.add("hidden");
   imagePreview.image.removeAttribute("src");
   imagePreview.image.alt = "Original upload thumbnail";
   imagePreview.frame.style.removeProperty("aspect-ratio");
+  state.previewVisible = true;
+  updatePreviewVisibility();
+}
+
+function togglePreviewVisibility() {
+  if (!state.sourceImage) return;
+  state.previewVisible = !state.previewVisible;
+  updatePreviewVisibility();
+}
+
+function updatePreviewVisibility() {
+  const hasImage = Boolean(state.sourceImage && imagePreview.image.getAttribute("src"));
+  const shouldDisplay = hasImage && state.previewVisible;
+  imagePreview.container.classList.toggle("hidden", !hasImage);
+  imagePreview.body.classList.toggle("hidden", !shouldDisplay);
+  const label = state.previewVisible ? "Hide image" : "Show image";
+  imagePreview.toggle.textContent = label;
+  imagePreview.toggle.setAttribute("aria-pressed", state.previewVisible ? "true" : "false");
+  imagePreview.toggle.disabled = !hasImage;
+}
+
+function handleSeedInput() {
+  const raw = controls.seedInput.value;
+  if (!raw.trim()) return;
+  setSeedString(raw, { rerender: true });
+}
+
+function applyRandomSeed({ rerender = true } = {}) {
+  const newSeed = generateSeedString();
+  setSeedString(newSeed, { rerender: rerender && Boolean(state.sourceImage) });
+}
+
+function setSeedString(seed, { rerender = false } = {}) {
+  const normalized = seed.trim();
+  if (!normalized) return;
+  if (state.seedString === normalized) {
+    if (rerender && state.sourceImage) {
+      renderArtwork();
+    }
+    return;
+  }
+  state.seedString = normalized;
+  state.randomSeed = hashSeed(normalized);
+  if (controls.seedInput.value !== normalized) {
+    controls.seedInput.value = normalized;
+  }
+  if (rerender && state.sourceImage) {
+    renderArtwork();
+  }
 }
 
 function saveAsPng() {
   if (!state.sourceImage) return;
   const dataURL = canvas.toDataURL("image/png");
   const link = document.createElement("a");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  const safeSeed = sanitizeSeedForFilename(state.seedString);
   link.href = dataURL;
-  link.download = `digital-art-playground-${timestamp}.png`;
+  link.download = `digital-art-playground-${safeSeed}-${dateStamp}.png`;
   link.click();
+}
+
+function sanitizeSeedForFilename(seedString) {
+  const fallback = "random";
+  const value = (seedString || "").trim();
+  if (!value) return fallback;
+  const sanitized = value.replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "");
+  return sanitized || fallback;
 }
 
 function clamp01(value) {
@@ -518,4 +599,22 @@ function seededRandom(seed) {
     state = (1103515245 * state + 12345) % 0x80000000;
     return state / 0x80000000;
   };
+}
+
+function generateSeedString() {
+  const seed = Math.random().toString(36).slice(2, 10);
+  return seed || "seed";
+}
+
+function hashSeed(seedString) {
+  let hash = 1779033703 ^ seedString.length;
+  for (let i = 0; i < seedString.length; i += 1) {
+    hash = Math.imul(hash ^ seedString.charCodeAt(i), 3432918353);
+    hash = (hash << 13) | (hash >>> 19);
+  }
+  hash = Math.imul(hash ^ (hash >>> 16), 2246822507);
+  hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+  hash ^= hash >>> 16;
+  const result = (hash >>> 0) / 4294967296;
+  return result > 0 ? result : 0.5;
 }

@@ -14,14 +14,21 @@
 
   <main class="app-main">
     <section class="controls">
-      <div class="image-preview hidden" id="imagePreviewGroup">
-        <p class="image-preview__label">Original Image</p>
-        <div class="image-preview__frame">
-          <img
-            id="imageThumbnail"
-            class="image-preview__image"
-            alt="Original upload thumbnail"
-          >
+      <div class="image-preview hidden" id="imagePreviewContainer">
+        <div class="image-preview__header">
+          <p class="image-preview__label">Source Image</p>
+          <button type="button" id="imagePreviewToggle" class="image-preview__toggle" aria-pressed="true">
+            Hide image
+          </button>
+        </div>
+        <div class="image-preview__body hidden" id="imagePreviewBody">
+          <div class="image-preview__frame">
+            <img
+              id="imageThumbnail"
+              class="image-preview__image"
+              alt="Original upload thumbnail"
+            >
+          </div>
         </div>
       </div>
 
@@ -36,22 +43,44 @@
           >
           <span class="file-upload__text">Upload Image</span>
         </label>
-        <p class="control-help">PNG, JPG, and WebP supported.</p>
       </div>
 
       <div class="control-group">
-        <label for="baseSize">Base Size <span id="baseSizeValue">50px</span></label>
-        <input id="baseSize" type="range" min="10" max="100" value="50" step="1" disabled>
+        <label for="seedInput">Seed</label>
+        <input
+          id="seedInput"
+          type="text"
+          class="seed-input"
+          placeholder="Auto"
+          spellcheck="false"
+          autocomplete="off"
+          disabled
+        >
       </div>
 
       <div class="control-group">
-        <label for="shapeDistribution">Shape Distribution <span id="shapeDistributionValue">50%</span></label>
-        <input id="shapeDistribution" type="range" min="0" max="100" value="50" step="1" disabled>
+        <label for="baseSize">Base Size <span id="baseSizeValue">40px</span></label>
+        <input id="baseSize" type="range" min="10" max="100" value="40" step="1" disabled>
       </div>
 
       <div class="control-group">
-        <label for="outlineProbability">Outline Probability <span id="outlineProbabilityValue">0%</span></label>
-        <input id="outlineProbability" type="range" min="0" max="100" value="0" step="1" disabled>
+        <label for="maxSize">Max Size <span id="maxSizeValue">10x</span></label>
+        <input id="maxSize" type="range" min="2" max="12" value="10" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="sizeDistribution">Size Distribution <span id="sizeDistributionValue">65%</span></label>
+        <input id="sizeDistribution" type="range" min="0" max="100" value="65" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="shapeDistribution">Shape Distribution <span id="shapeDistributionValue">65%</span></label>
+        <input id="shapeDistribution" type="range" min="0" max="100" value="65" step="1" disabled>
+      </div>
+
+      <div class="control-group">
+        <label for="outlineProbability">Outline Probability <span id="outlineProbabilityValue">15%</span></label>
+        <input id="outlineProbability" type="range" min="0" max="100" value="15" step="1" disabled>
       </div>
 
       <div class="control-group">
@@ -60,18 +89,8 @@
       </div>
 
       <div class="control-group">
-        <label for="sizeDistribution">Size Distribution <span id="sizeDistributionValue">50%</span></label>
-        <input id="sizeDistribution" type="range" min="0" max="100" value="50" step="1" disabled>
-      </div>
-
-      <div class="control-group">
-        <label for="maxSize">Max Size <span id="maxSizeValue">4x</span></label>
-        <input id="maxSize" type="range" min="2" max="12" value="4" step="1" disabled>
-      </div>
-
-      <div class="control-group">
-        <label for="layerCount">Layers <span id="layerCountValue">3</span></label>
-        <input id="layerCount" type="range" min="1" max="5" value="3" step="1" disabled>
+        <label for="layerCount">Layers <span id="layerCountValue">4</span></label>
+        <input id="layerCount" type="range" min="1" max="5" value="4" step="1" disabled>
       </div>
 
       <div class="button-row">
